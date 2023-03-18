@@ -14,7 +14,7 @@ use rlua::{
     Context, FromLua as FromLuaR, FromLuaMulti as FromLuaMultiR, MetaMethod as MetaMethodR,
     Result as ResultR, ToLuaMulti as ToLuaMultiR, UserData as UserDataR,
 };
-use serde::{Deserialize, Serialize};
+use serde::{ser::SerializeSeq, Deserialize, Serialize};
 
 #[cfg(feature = "mlua")]
 use crate::mlu::{
@@ -277,6 +277,7 @@ pub struct RecordGenerator {
     )]
     pub type_name: Cow<'static, [NamePart]>,
     ///The exposed fields and their types
+    #[serde(serialize_with = "serialize_fields")]
     pub fields: Vec<Field>,
     ///The exposed static fields and their types
     pub static_fields: Vec<Field>,
@@ -517,6 +518,21 @@ impl RecordGenerator {
         self.type_doc.push('\n');
         self
     }
+}
+
+fn serialize_fields<S>(fields: &Vec<Field>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    let mut duplicates = HashSet::new();
+    let mut seq = serializer.serialize_seq(None)?;
+    for element in fields
+        .iter()
+        .filter(|field| duplicates.insert(field.name.0.clone()))
+    {
+        seq.serialize_element(element)?;
+    }
+    seq.end()
 }
 
 #[cfg(feature = "rlua")]
